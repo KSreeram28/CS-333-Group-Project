@@ -67,3 +67,91 @@ def HPOptimize(clf, par, trainX, trainY, valX, valY, name, lossChoice):
     fprArr, tprArr, _ = roc_curve(valY, y_score[:, 1])
 
     return cal_model, topParams, customScore, performance, precisionArr, recallArr, fprArr, tprArr, name, paramDict
+
+# choose the best classifier model
+def choose_best(customScoreLR, modelLR, customScoreSVC, modelSVC, customScoreRF, modelRF, customScoreKNN, modelKNN,
+                customScoreXGBoost, modelXGBoost, customScoreNB, modelNB, y_name, X_test, y_test_arr, outcome):
+    bestModel, bestModelName, testPerformance, precisionArrTest, recallArrTest, fprArrTest, tprArrTest = "tie/invalid", "tie/invalid", "tie/invalid", "tie/invalid", "tie/invalid", "tie/invalid", "tie/invalid"
+
+    if (
+            customScoreLR > customScoreSVC and customScoreLR > customScoreRF and customScoreLR > customScoreKNN and customScoreLR > customScoreXGBoost and customScoreLR > customScoreNB):
+        bestModelName = "Logistic Regression"
+        testPerformance = performanceMetrics(X_test, y_test, modelLR)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelLR.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelLR.predict_proba(X_test)[:, 1])
+        bestModel = modelLR
+
+    elif (
+            customScoreSVC > customScoreLR and customScoreSVC > customScoreRF and customScoreSVC > customScoreKNN and customScoreSVC > customScoreXGBoost and customScoreSVC > customScoreNB):
+        bestModelName = "Support Vector Classifier"
+        testPerformance = performanceMetrics(X_test, y_test, modelSVC)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelSVC.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelSVC.predict_proba(X_test)[:, 1])
+        bestModel = modelSVC
+
+    elif (
+            customScoreRF > customScoreLR and customScoreRF > customScoreSVC and customScoreRF > customScoreKNN and customScoreRF > customScoreXGBoost and customScoreRF > customScoreNB):
+        bestModelName = "Random Forest"
+        testPerformance = performanceMetrics(X_test, y_test, modelRF)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelRF.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelRF.predict_proba(X_test)[:, 1])
+        bestModel = modelRF
+
+    elif (
+            customScoreKNN > customScoreLR and customScoreKNN > customScoreSVC and customScoreKNN > customScoreRF and customScoreKNN > customScoreXGBoost and customScoreKNN > customScoreNB):
+        bestModelName = "K-Nearest Neighbors"
+        testPerformance = performanceMetrics(X_test, y_test, modelKNN)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelKNN.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelKNN.predict_proba(X_test)[:, 1])
+        bestModel = modelKNN
+
+    elif (
+            customScoreXGBoost > customScoreLR and customScoreXGBoost > customScoreSVC and customScoreXGBoost > customScoreRF and customScoreXGBoost > customScoreKNN and customScoreXGBoost > customScoreNB):
+        bestModelName = "XGBoost"
+        testPerformance = performanceMetrics(X_test, y_test, modelXGBoost)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelXGBoost.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelXGBoost.predict_proba(X_test)[:, 1])
+        bestModel = modelXGBoost
+
+    elif (
+            customScoreNB > customScoreLR and customScoreNB > customScoreSVC and customScoreNB > customScoreRF and customScoreNB > customScoreKNN and customScoreNB > customScoreXGBoost):
+        bestModelName = "Naive Bayes"
+        testPerformance = performanceMetrics(X_test, y_test, modelNB)
+        precisionArrTest, recallArrTest, _ = precision_recall_curve(y_test, modelNB.predict_proba(X_test)[:, 1])
+        fprArrTest, tprArrTest, _ = roc_curve(y_test, modelNB.predict_proba(X_test)[:, 1])
+        bestModel = modelNB
+
+    else:
+        print("Tie/Invalid")
+        print(customScoreLR, customScoreSVC, customScoreRF, customScoreKNN, customScoreXGBoost, customScoreNB)
+        print("Tie/Invalid")
+        print("Tie/Invalid")
+        print("Tie/Invalid")
+
+    return bestModel, bestModelName, testPerformance, precisionArrTest, recallArrTest, fprArrTest, tprArrTest
+
+def calc_youden_j(tpr, fpr):
+    youdens = tpr + (-1 * fpr)
+    index = np.argmax(youdens)
+    return index
+
+def shap_values(model, X_train, featureNames):
+    explainer = shap.TreeExplainer(model.base_estimator)
+    # shap_values = explainer.shap_values(X_train)
+    shap_obj = explainer(X_train)
+    plt.figure(figsize=(25, 13))
+    shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
+                      features=X_train,
+                      feature_names=featureNames,
+                      sort=False, plot_size=None,
+                      show=False)
+    plt.savefig("features_dotplot.png")
+
+    plt.figure(figsize=(25, 13))
+    shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
+                      features=X_train,
+                      feature_names=featureNames,
+                      sort=False, plot_size=None,
+                      show=False, plot_type="bar")
+    plt.savefig("features_barplot.png")
+    return
