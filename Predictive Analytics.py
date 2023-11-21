@@ -666,12 +666,13 @@ calibrated_clf = CalibratedClassifierCV(base_estimator=pre_cal_NB, cv=9, method=
 modelNB = calibrated_clf.fit(X_train, y_train)
 customScoreNB, performanceNB, = customLossNB(y_val, X_val, modelNB, lossChoice), performanceMetrics(X_val, y_val,
                                                                                                     modelNB)
-y_val = label_binarize(y_test, classes=np.arange(3))
+y_val = label_binarize(y_test, classes=np.arange(3))[:-1]
 y_score = modelNB.predict_proba(X_val)
 
 fprArrNB = dict()
 tprArrNB = dict()
 rocaucArrNB = dict()
+
 
 for i in range(3):
     print(y_val[:, i], y_score[:, i])
