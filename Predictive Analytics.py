@@ -2,6 +2,7 @@ import csv
 import pandas as pd
 
 import numpy as np
+from sklearn.metrics import roc_auc_score
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
 import matplotlib
@@ -155,3 +156,108 @@ def shap_values(model, X_train, featureNames):
                       show=False, plot_type="bar")
     plt.savefig("features_barplot.png")
     return
+
+def nameLoss(lossChoice):  # Eventually pass in case, that is associated with which loss function
+    if (lossChoice == 1):
+        return "AUCROC AUPRC Geometric Mean"
+    elif (lossChoice == 2):
+        return "AUCROC"
+    elif (lossChoice == 3):
+        return "AUPRC"
+    elif (lossChoice == 4):  # precision
+        return "Precision"
+    elif (lossChoice == 5):  # sensitivity, aka recall, aka TPR
+        return "Recall"
+    elif (lossChoice == 6):  # specificity
+        return "Specificity"
+    elif (lossChoice == 7):  # ppv
+        return "PPV"
+    elif (lossChoice == 8):  # npv
+        return "NPV"
+    return
+
+
+def performanceMetrics(X, y, model):
+    y_proba = model.predict_proba(X)[:, 1]
+    y_pred = model.predict(X)
+
+    auroc = roc_auc_score(y, y_proba)
+
+    ap = average_precision_score(y, y_proba)
+
+    mix_auroc_auprc = np.sqrt(roc_auc_score(y, y_proba) * average_precision_score(y, y_proba))
+
+    precision = precision_score(y, y_pred)
+    recall = recall_score(y, y_pred)
+
+    tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
+
+    specificity = tn / (tn + fp)
+
+    ppv = tp / (tp + fp)
+
+    npv = tn / (tn + fn)
+
+    f1 = f1_score(y, y_pred)
+
+    accuracy = accuracy_score(y, y_pred)
+
+    return [auroc, ap, mix_auroc_auprc, precision, recall, specificity, ppv, npv, tn, fp, fn, tp, f1, accuracy]
+
+
+def choose_custom_loss(lossChoice):
+    if (lossChoice == 1):
+        def customLoss(true, pred):
+            return np.sqrt(roc_auc_score(true, pred) * average_precision_score(true, pred))
+
+        proba = True
+
+    elif (lossChoice == 2):
+        def customLoss(true, pred):
+            return roc_auc_score(true, pred)
+
+        proba = True
+
+    elif (lossChoice == 3):
+        def customLoss(true, pred):
+            return average_precision_score(true, pred)
+
+        proba = False
+
+    elif (lossChoice == 4):  # precision
+        def customLoss(true, pred):
+            return precision_score(true, pred)
+
+        proba = False
+
+    elif (lossChoice == 5):  # sensitivity, aka recall, aka TPR
+        def customLoss(true, pred):
+            return recall_score(true, pred)
+
+        proba = False
+
+    elif (lossChoice == 6):  # specificity
+        def customLoss(true, pred):
+            tn, fp, fn, tp = confusion_matrix(true, pred).ravel()
+            specificity = tn / (tn + fp)
+            return specificity
+
+        proba = False
+
+    elif (lossChoice == 7):  # ppv
+        def customLoss(true, pred):
+            tn, fp, fn, tp = confusion_matrix(true, pred).ravel()
+            ppv = tp / (tp + fp)
+            return ppv
+
+        proba = False
+
+    elif (lossChoice == 8):  # npv
+        def customLoss(true, pred):
+            tn, fp, fn, tp = confusion_matrix(true, pred).ravel()
+            npv = tn / (tn + fn)
+            return npv
+
+        proba = False
+
+    return customLoss, proba
