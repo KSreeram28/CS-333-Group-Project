@@ -40,7 +40,6 @@ from sklearn.preprocessing import label_binarize
 
 def readInData(dataset):
     global df
-    global df2
     global colNames
     df = pd.read_csv(dataset)
     colNames = df.columns.tolist()
@@ -369,6 +368,26 @@ def shap_values(model, X_train, featureNames):
     plt.savefig("features_barplot.png")
     return
 
+def nameLoss(lossChoice):  # Eventually pass in case, that is associated with which loss function
+    if (lossChoice == 1):
+        return "AUCROC AUPRC Geometric Mean"
+    elif (lossChoice == 2):
+        return "AUCROC"
+    elif (lossChoice == 3):
+        return "AUPRC"
+    elif (lossChoice == 4):  # precision
+        return "Precision"
+    elif (lossChoice == 5):  # sensitivity, aka recall, aka TPR
+        return "Recall"
+    elif (lossChoice == 6):  # specificity
+        return "Specificity"
+    elif (lossChoice == 7):  # ppv
+        return "PPV"
+    elif (lossChoice == 8):  # npv
+        return "NPV"
+    return
+
+
 def performanceMetrics(X, y, model):
     y_proba = model.predict_proba(X)
     y_pred = model.predict(X)
@@ -387,7 +406,7 @@ def choose_custom_loss(lossChoice):
 
     elif (lossChoice == 2):
         def customLoss(true, pred):
-            return roc_auc_score(true, pred)
+            return roc_auc_score(true, pred, multi_class="ovr")
 
         proba = True
 
@@ -441,8 +460,8 @@ def customLossNB(true, X_val, modelNB, lossChoice):
         return np.sqrt(roc_auc_score(true, pred) * average_precision_score(true, pred))
 
     elif (lossChoice == 2):
-        pred = modelNB.predict_proba(X_val)[:, 1]
-        return roc_auc_score(true, pred)
+        pred = modelNB.predict_proba(X_val)
+        return roc_auc_score(true, pred, multi_class = "ovr")
 
     elif (lossChoice == 3):
         pred = modelNB.predict(X_val)
@@ -559,7 +578,7 @@ def plot_calibration(myModels, X_train, X_test, y_train, y_test, outcome, outcom
         ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
                  label="%s" % (name,), color=color[index])
 
-        csvXY(mean_predicted_value, fraction_of_positives, myOutcome, "AUROC", "calibration")
+        csvXY(mean_predicted_value, fraction_of_positives, myOutcome, nameLoss(lossChoice), "calibration")
 
         ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
                  histtype="step", lw=2, color=color[index])
@@ -601,8 +620,7 @@ print(featureNames)
 X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.10, random_state=42, stratify=y)
 X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.11111, random_state=42, stratify=y_train_val)
 
-#X_train, X_val, y_train, y_val = train_test_split(X_train_val, y_train_val, test_size=0.1765, random_state=42,
-                                                #  stratify=y_train_val)
+
 
 y_test_arr = y_test.to_numpy()
 
@@ -656,6 +674,7 @@ tprArrNB = dict()
 rocaucArrNB = dict()
 
 for i in range(3):
+    print(y_val[:, i], y_score[:, i])
     fprArrNB[i], tprArrNB[i], _ = roc_curve(y_val[:, i], y_score[:, i])
     rocaucArrNB[i] = auc(fprArrNB[i], tprArrNB[i])
 
@@ -693,7 +712,7 @@ nameList = [nameLR, nameSVC, nameRF, nameKNN, nameXGBoost, nameNB]
 bestModel, bestModelName, testPerformance, fprArrTest, tprArrTest, rocaucArrTest = choose_best(
     customScoreLR, modelLR, customScoreSVC, modelSVC,
     customScoreRF, modelRF, customScoreKNN, modelKNN, customScoreXGBoost,
-    modelXGBoost, customScoreNB, modelNB, myName, X_test, y_test, "AUROC")
+    modelXGBoost, customScoreNB, modelNB, myName, X_test, y_test, nameLoss(lossChoice))
 filename = bestModelName + "_model.sav"
 pickle.dump(bestModel.base_estimator, open(filename, "wb"))
 
@@ -701,7 +720,7 @@ shap_values(bestModel, X_train, featureNames)
 
 print("Saving Test Predicitions")
 gt_preds = np.stack((y_test, bestModel.predict_proba(X_test)[:, 1]), axis=1)
-np.savetxt("gt_preds_test_{}_{}.csv".format(myOutcome, "AUROC"), gt_preds, fmt='%s', delimiter=',')
+np.savetxt("gt_preds_test_{}_{}.csv".format(myOutcome, nameLoss(lossChoice)), gt_preds, fmt='%s', delimiter=',')
 
 # output_file("allresults.txt", "a", nameLoss(lossChoice), myOutcome, paramsList, performanceList, paramDictList)
 
@@ -712,7 +731,7 @@ np.savetxt("gt_preds_test_{}_{}.csv".format(myOutcome, "AUROC"), gt_preds, fmt='
            # performanceList)
 
 # Test Set Plots
-plot_master([fprArrTest], [tprArrTest], [rocaucArrTest], [bestModelName], "AUROC",
+plot_master([fprArrTest], [tprArrTest], [rocaucArrTest], [bestModelName], nameLoss(lossChoice),
             myOutcome, [testPerformance])
 
 model_dict = {}
