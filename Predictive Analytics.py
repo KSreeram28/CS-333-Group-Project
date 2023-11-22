@@ -5,11 +5,9 @@ from datetime import datetime
 import csv
 
 import numpy as np
-from sklearn.impute import SimpleImputer
 import pandas as pd
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
-import matplotlib
 from sklearn.model_selection import train_test_split, learning_curve
 from sklearn.metrics import roc_auc_score, f1_score, confusion_matrix, classification_report, accuracy_score, \
     average_precision_score, precision_score, recall_score, make_scorer, roc_curve, precision_recall_curve, \
@@ -20,8 +18,6 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.feature_selection import SelectFromModel
 from sklearn import preprocessing, datasets
 from sklearn.preprocessing import StandardScaler
-import scipy.stats as stat
-from sklearn.utils import resample
 import random
 import sys
 from sklearn.model_selection import GridSearchCV
@@ -54,21 +50,10 @@ def readInData(dataset):
                                   df["risk_score_t"] <= percentile_55],
                                  [2, 1, 0],
                                  default=0)
-    df = df.drop(
-        columns=["risk_score_t", "id", "program_enrolled_t", "cost_t", "cost_avoidable_t", "cost_emergency_tm1",
-                 "cost_home_health_tm1", "cost_ip_medical_tm1", "cost_ip_surgical_tm1", "cost_laboratory_tm1",
-                 "cost_op_primary_care_tm1", "cost_op_specialists_tm1", "cost_op_surgery_tm1", "cost_other_tm1",
-                 "cost_pharmacy_tm1", "cost_physical_therapy_tm1", "cost_radiology_tm1"])
-    race_mapping = {'black': 0, 'white': 1}
 
-    # Apply the mapping to the 'Race' column
-    df['race'] = df['race'].map(race_mapping)
-    print(df["race"])
     colNames = df.columns.tolist()
 
-    mean_imputer = SimpleImputer(strategy='mean')
-    df_impute = mean_imputer.fit_transform(df)
-    df = pd.DataFrame(df_impute, columns = df.columns)
+    df = df.drop(columns = ["risk_score_t", "Unnamed: 0"])
     print(df)
     print("missing data",np.sum(df.isnull().sum()))
 
@@ -342,31 +327,28 @@ def choose_best(customScoreLR, modelLR, customScoreSVC, modelSVC, customScoreRF,
     print(rocaucArrTest)
     return bestModel, bestModelName, testPerformance, fprArrTest, tprArrTest, rocaucArrTest
 
-def calc_youden_j(tpr, fpr):
-    youdens = tpr + (-1 * fpr)
-    index = np.argmax(youdens)
-    return index
 
-def shap_values(model, X_train, featureNames):
-    explainer = shap.TreeExplainer(model.base_estimator)
-    # shap_values = explainer.shap_values(X_train)
-    shap_obj = explainer(X_train)
-    plt.figure(figsize=(25, 13))
-    shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
-                      features=X_train,
-                      feature_names=featureNames,
-                      sort=False, plot_size=None,
-                      show=False)
-    plt.savefig("features_dotplot.png")
 
-    plt.figure(figsize=(25, 13))
-    shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
-                      features=X_train,
-                      feature_names=featureNames,
-                      sort=False, plot_size=None,
-                      show=False, plot_type="bar")
-    plt.savefig("features_barplot.png")
-    return
+# def shap_values(model, X_train, featureNames):
+#     explainer = shap.TreeExplainer(model.base_estimator)
+#     # shap_values = explainer.shap_values(X_train)
+#     shap_obj = explainer(X_train)
+#     plt.figure(figsize=(25, 13))
+#     shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
+#                       features=X_train,
+#                       feature_names=featureNames,
+#                       sort=False, plot_size=None,
+#                       show=False)
+#     plt.savefig("features_dotplot.png")
+#
+#     plt.figure(figsize=(25, 13))
+#     shap.summary_plot(shap_values=np.take(shap_obj.values, 0, axis=-1),
+#                       features=X_train,
+#                       feature_names=featureNames,
+#                       sort=False, plot_size=None,
+#                       show=False, plot_type="bar")
+#     plt.savefig("features_barplot.png")
+#     return
 
 def nameLoss(lossChoice):  # Eventually pass in case, that is associated with which loss function
     if (lossChoice == 1):
@@ -553,60 +535,52 @@ def plot_master(fprArrList, tprArrList, rocaucArrList, nameList, lossFunction, o
         plt.ylim([-0.01, 1.01])
         plt.xlim([-0.01, 1.01])
         plt.legend(loc='lower right', fontsize='small')
+    plt.savefig("PW_ROC_figure_{}_{}_{}_train.png".format(figureType, lossFunction, outcome))
+    return 0
 
-def plot_calibration(myModels, X_train, X_test, y_train, y_test, outcome, outcome_name):
-    f = plt.figure(figsize=(10, 10))
-    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
-    ax2 = plt.subplot2grid((3, 1), (2, 0))
+def plot_all(fprArrList, tprArrList, rocaucArrList, nameList, lossFunction, outcome,
+                performanceList):
+    if (len(fprArrList) != len(tprArrList)):
+        return "Lists passed are of unequal length"
+
+    if (len(nameList) < 2):
+        figureType = "Test"
+    else:
+        figureType = "Validation"
 
     color = ['#e58e23', 'b', 'g', 'r', 'c', 'm', 'y']
-    index = 0
 
-    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
-    for name, clf in myModels.items():
-        print(name, clf)
-        # clf.fit(X_train, y_train)
-        if hasattr(clf, "predict_proba"):
-            prob_pos = clf.predict_proba(X_test)[:, 1]
-        else:  # use decision function
-            prob_pos = clf.decision_function(X_test)
-            prob_pos = \
-                (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
-        fraction_of_positives, mean_predicted_value = \
-            calibration_curve(y_test, prob_pos, n_bins=10)
+    plt.figure(figsize=(14, 7))
+    for i in range(len(fprArrList)):
 
-        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
-                 label="%s" % (name,), color=color[index])
+        fpr = fprArrList[i]
+        tpr = tprArrList[i]
+        roc=rocaucArrList[i]
+        plt.plot(
+            fpr["macro"],
+            tpr["macro"],
+            label= nameList[i] + " AUC = {0:0.2f}".format(roc["macro"]),
+            color=color[i],
+            linestyle=":",
+            linewidth=4,
+        )
 
-        csvXY(mean_predicted_value, fraction_of_positives, myOutcome, nameLoss(lossChoice), "calibration")
+        plt.suptitle("Loss Function: " + lossFunction + "           Outcome: " + outcome)
 
-        ax2.hist(prob_pos, range=(0, 1), bins=10, label=name,
-                 histtype="step", lw=2, color=color[index])
-        index = index + 1
 
-    ax1.set_ylabel("Fraction of Positives")
-    ax1.set_ylim([-0.05, 1.05])
-    ax1.set_xlabel("Predicted Probability")
+        plt.title("Macro Average ROCs ")
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.ylim([-0.01, 1.01])
+        plt.xlim([-0.01, 1.01])
+        plt.legend(loc='lower right', fontsize='small')
+    plt.savefig("PW_ROC_figure_{}_{}_{}_comparison.png".format(figureType, lossFunction, outcome))
+    return 0
 
-    ax1.legend(loc="lower right")
-    # ax1.set_title('Calibration plots  (reliability curve)')
 
-    ax2.set_xlabel("Mean Predicted Value")
-    ax2.set_ylabel("Count")
-    ax2.legend(loc="upper center", ncol=2)
-
-    plt.tight_layout()
-    f.savefig("calibration_{}_{}.png".format(outcome, outcome_name))
-
-def csvXY(x_arr, y_arr, optimizedFor, outcome, name):
-    temp_df = pd.DataFrame()
-    temp_df["X"] = x_arr
-    temp_df["Y"] = y_arr
-    temp_df.to_csv(path_or_buf="PWgraphData_{}_optimizedFor_{}_outcome_{}.csv".format(name, optimizedFor, outcome),
-                   index=False)
 
 lossChoice = 2
-readInData("data_new.csv")
+readInData("balanced_df.csv")
 y = df["Referral"]
 X = df.drop(columns = ["Referral"])
 myName = colNames
@@ -666,7 +640,7 @@ calibrated_clf = CalibratedClassifierCV(base_estimator=pre_cal_NB, cv=9, method=
 modelNB = calibrated_clf.fit(X_train, y_train)
 customScoreNB, performanceNB, = customLossNB(y_val, X_val, modelNB, lossChoice), performanceMetrics(X_val, y_val,
                                                                                                     modelNB)
-y_val = label_binarize(y_test, classes=np.arange(3))[:-1]
+y_val = label_binarize(y_test, classes=np.arange(3))
 y_score = modelNB.predict_proba(X_val)
 
 fprArrNB = dict()
@@ -717,8 +691,8 @@ bestModel, bestModelName, testPerformance, fprArrTest, tprArrTest, rocaucArrTest
 filename = bestModelName + "_model.sav"
 pickle.dump(bestModel.base_estimator, open(filename, "wb"))
 
-shap_values(bestModel, X_train, featureNames)
-
+#shap_values(bestModel, X_train, featureNames)
+print(bestModel.base_estimator.feature_importances_)
 print("Saving Test Predicitions")
 gt_preds = np.stack((y_test, bestModel.predict_proba(X_test)[:, 1]), axis=1)
 np.savetxt("gt_preds_test_{}_{}.csv".format(myOutcome, nameLoss(lossChoice)), gt_preds, fmt='%s', delimiter=',')
@@ -728,12 +702,12 @@ np.savetxt("gt_preds_test_{}_{}.csv".format(myOutcome, nameLoss(lossChoice)), gt
 # output_file("lastRun.txt", "w", nameLoss(lossChoice), myOutcome, paramsList, performanceList, paramDictList)
 
 # Validation Set Plots
-#plot_master(fprArrList, tprArrList, rocaucArrList, nameList, nameLoss(lossChoice), myOutcome,
-           # performanceList)
+plot_all(fprArrList, tprArrList, rocaucArrList, nameList, nameLoss(lossChoice), myOutcome,
+            performanceList)
 
 # Test Set Plots
 plot_master([fprArrTest], [tprArrTest], [rocaucArrTest], [bestModelName], nameLoss(lossChoice),
-            myOutcome, [testPerformance])
+           myOutcome, [testPerformance])
 
 model_dict = {}
 for i in range(len(modelList)):
